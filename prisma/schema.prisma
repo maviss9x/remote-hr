@@ -1,0 +1,392 @@
+// Prisma schema file for Microsoft SQL Server 2019
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlserver"
+}
+
+// ============================================
+// 1. USERS & AUTH
+// ============================================
+
+model User {
+  id           Int      @id @default(autoincrement())
+  fullName     String   @map("full_name")
+  email        String?  @unique
+  phone        String   @unique
+  cccd         String?  @unique
+  bankAccount  String?  @map("bank_account")
+  bankName     String?  @map("bank_name")
+  passwordHash String   @map("password_hash")
+  role         String   @default("NHAN_SU_HYBRID")
+  status       String   @default("PROBATION")
+  startDate        DateTime  @map("start_date")
+  dateOfBirth      DateTime? @map("date_of_birth") @db.Date
+  cccdDate         DateTime? @map("cccd_date") @db.Date
+  cccdPlace        String?   @map("cccd_place")
+  currentAddress   String?   @map("current_address")
+  permanentAddress String?   @map("permanent_address")
+  avatarUrl        String?   @map("avatar_url")
+  driveFolderUrl   String?   @map("drive_folder_url") @db.NVarChar(1000)
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  contracts          Contract[]
+  shiftRegistrations ShiftRegistration[]
+  dailyReports       DailyReport[]
+  qcReviews          QcReview[]          @relation("reviewer")
+  weeklyEvaluations  WeeklyEvaluation[]
+  monthlyAcceptances MonthlyAcceptance[]
+  notifications      Notification[]
+  loginSessions      LoginSession[]
+  viralPosts         ViralPost[]
+  userKpiConfigs     UserKpiConfig[]
+
+  @@map("users")
+}
+
+// ============================================
+// 2. CONTRACTS
+// ============================================
+
+model Contract {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  startDate    DateTime @map("start_date")
+  endDate      DateTime @map("end_date")
+  status       String   @default("ACTIVE")
+  alertSent    Boolean  @default(false) @map("alert_sent")
+  contractType String   @default("khoan_viec") @map("contract_type")
+  note         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@map("contracts")
+}
+
+// ============================================
+// 3. SHIFT REGISTRATIONS
+// ============================================
+
+model ShiftRegistration {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  shiftDate  DateTime @map("shift_date") @db.Date
+  shiftType  String   @map("shift_type")
+  workMode   String   @default("ONLINE") @map("work_mode")
+  status     String   @default("REGISTERED")
+  weekNumber Int      @map("week_number")
+  year       Int
+  reopenedBy Int?     @map("reopened_by")
+  reopenedUntil DateTime? @map("reopened_until")
+  note       String?  @map("note")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  dailyReport  DailyReport?
+  loginSession LoginSession?
+
+  @@unique([userId, shiftDate, shiftType])
+  @@map("shift_registrations")
+}
+
+// ============================================
+// 4. SHIFT SCHEDULE CONFIGS
+// ============================================
+
+model ShiftScheduleConfig {
+  id                  Int       @id @default(autoincrement())
+  weekNumber          Int       @map("week_number")
+  year                Int
+  registrationOpenAt  DateTime  @map("registration_open_at")
+  registrationCloseAt DateTime  @map("registration_close_at")
+  isLocked            Boolean   @default(false) @map("is_locked")
+  reopenedUserIds     String    @default("[]") @map("reopened_user_ids") @db.NVarChar(Max)
+  approvedByManagerId Int?      @map("approved_by_manager_id")
+  approvedAt          DateTime? @map("approved_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@unique([weekNumber, year])
+  @@map("shift_schedule_configs")
+}
+
+// ============================================
+// 5. LOGIN SESSIONS
+// ============================================
+
+model LoginSession {
+  id                  Int       @id @default(autoincrement())
+  userId              Int       @map("user_id")
+  shiftRegistrationId Int       @unique @map("shift_registration_id")
+  loginTime           DateTime  @map("login_time")
+  logoutTime          DateTime? @map("logout_time")
+  isLate              Boolean   @default(false) @map("is_late")
+  lateMinutes         Int       @default(0) @map("late_minutes")
+  autoMarkedAbsent    Boolean   @default(false) @map("auto_marked_absent")
+  ipAddress           String?   @map("ip_address")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  user              User              @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  shiftRegistration ShiftRegistration @relation(fields: [shiftRegistrationId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@map("login_sessions")
+}
+
+// ============================================
+// 6. DAILY REPORTS
+// ============================================
+
+model DailyReport {
+  id                  Int      @id @default(autoincrement())
+  userId              Int      @map("user_id")
+  shiftRegistrationId Int      @unique @map("shift_registration_id")
+  reportDate          DateTime @map("report_date") @db.Date
+  shiftType           String   @map("shift_type")
+
+  fbLinks            String   @default("[]") @map("fb_links") @db.NVarChar(Max)
+  fbSupplementLinks  String   @default("[]") @map("fb_supplement_links") @db.NVarChar(Max)
+  threadLinks        String   @default("[]") @map("thread_links") @db.NVarChar(Max)
+  commentDriveLink   String?  @map("comment_drive_link")
+  femaleContentLinks String   @default("[]") @map("female_content_links") @db.NVarChar(Max)
+  viralPostLinks     String   @default("[]") @map("viral_post_links") @db.NVarChar(Max)
+  viralProposals     String   @default("[]") @map("viral_proposals") @db.NVarChar(Max)
+  postTags           String   @default("{}") @map("post_tags") @db.NVarChar(Max)
+
+  endFbCount         Int?     @map("end_fb_count")
+  endThreadCount     Int?     @map("end_thread_count")
+  thresholdMet       Boolean? @map("threshold_met")
+  endSnapshotAt      DateTime? @map("end_snapshot_at")
+
+  submittedAt        DateTime @default(now()) @map("submitted_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  user              User              @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+  shiftRegistration ShiftRegistration @relation(fields: [shiftRegistrationId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  qcReview          QcReview?
+  viralPosts        ViralPost[]
+
+  @@map("daily_reports")
+}
+
+// ============================================
+// 7. QC REVIEWS
+// ============================================
+
+model QcReview {
+  id              Int       @id @default(autoincrement())
+  dailyReportId   Int       @unique @map("daily_report_id")
+  reviewerId      Int       @map("reviewer_id")
+
+  fbApproved      Int       @default(0) @map("fb_approved")
+  threadApproved  Int       @default(0) @map("thread_approved")
+  commentApproved Int       @default(0) @map("comment_approved")
+
+  result          String    @default("PENDING")
+  feedback        String?
+  invalidLinks    String    @default("[]") @map("invalid_links") @db.NVarChar(Max)
+  reviewedAt      DateTime? @map("reviewed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  reviewer    User        @relation("reviewer", fields: [reviewerId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  @@map("qc_reviews")
+}
+
+// ============================================
+// 8. WEEKLY EVALUATIONS
+// ============================================
+
+model WeeklyEvaluation {
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @map("user_id")
+  weekNumber            Int       @map("week_number")
+  year                  Int
+
+  totalShifts           Int       @default(0) @map("total_shifts")
+  totalShiftsPassed     Int       @default(0) @map("total_shifts_passed")
+
+  fbActual              Int       @default(0) @map("fb_actual")
+  threadActual          Int       @default(0) @map("thread_actual")
+  commentActual         Int       @default(0) @map("comment_actual")
+
+  fbCompletionRate      Float     @default(0) @map("fb_completion_rate")
+  threadCompletionRate  Float     @default(0) @map("thread_completion_rate")
+  commentCompletionRate Float     @default(0) @map("comment_completion_rate")
+
+  fbGrowth              Float?    @map("fb_growth")
+  threadGrowth          Float?    @map("thread_growth")
+  commentGrowth         Float?    @map("comment_growth")
+
+  fbQualityReview       String?   @map("fb_quality_review")
+  threadQualityReview   String?   @map("thread_quality_review")
+  commentQualityReview  String?   @map("comment_quality_review")
+  postCareReview        String?   @map("post_care_review")
+
+  viralLinks            String    @default("[]") @map("viral_links") @db.NVarChar(Max)
+  badLinks              String    @default("[]") @map("bad_links") @db.NVarChar(Max)
+  viralBonus            Int       @default(0) @map("viral_bonus")
+
+  overallRating         String    @default("GOOD") @map("overall_rating")
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@unique([userId, weekNumber, year])
+  @@map("weekly_evaluations")
+}
+
+// ============================================
+// 9. MONTHLY ACCEPTANCES
+// ============================================
+
+model MonthlyAcceptance {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @map("user_id")
+  month             Int
+  year              Int
+
+  totalPosts        Int       @default(0) @map("total_posts")
+  totalComments     Int       @default(0) @map("total_comments")
+  totalShifts       Int       @default(0) @map("total_shifts")
+  totalShiftsPassed Int       @default(0) @map("total_shifts_passed")
+  totalPackages     Int       @default(0) @map("total_packages")
+
+  viralBonus        Int       @default(0) @map("viral_bonus")
+  bonusNote         String?   @map("bonus_note")
+  status            String    @default("DRAFT")
+
+  confirmedAt       DateTime? @map("confirmed_at")
+  exportedAt        DateTime? @map("exported_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@unique([userId, month, year])
+  @@map("monthly_acceptances")
+}
+
+// ============================================
+// 10. KPI CONFIGS
+// ============================================
+
+model KpiConfig {
+  id                   Int       @id @default(autoincrement())
+  fbPerShift           Int       @default(10) @map("fb_per_shift")
+  threadPerShift       Int       @default(4) @map("thread_per_shift")
+  commentPerShift      Int       @default(50) @map("comment_per_shift")
+  minShiftsPerWeek     Int       @default(5) @map("min_shifts_per_week")
+  maxAbsentsPerMonth   Int       @default(3) @map("max_absents_per_month")
+  minDaysForSalary     Int       @default(3) @map("min_days_for_salary")
+  lateThresholdMinutes Int       @default(60) @map("late_threshold_minutes")
+  effectiveFrom        DateTime  @map("effective_from")
+  effectiveTo          DateTime? @map("effective_to")
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  @@map("kpi_configs")
+}
+
+model UserKpiConfig {
+  id                   Int       @id @default(autoincrement())
+  userId               Int       @map("user_id")
+  fbPerShift           Int?      @map("fb_per_shift")
+  threadPerShift       Int?      @map("thread_per_shift")
+  commentPerShift      Int?      @map("comment_per_shift")
+  minShiftsPerWeek     Int?      @map("min_shifts_per_week")
+  note                 String?   @map("note")
+  effectiveFrom        DateTime  @map("effective_from")
+  effectiveTo          DateTime? @map("effective_to")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@index([userId, effectiveFrom])
+  @@map("user_kpi_configs")
+}
+
+// ============================================
+// 11. VIRAL BONUS TIERS
+// ============================================
+
+model ViralBonusTier {
+  id          Int      @id @default(autoincrement())
+  contentType String   @map("content_type")
+  platform    String
+  minLikes    Int      @map("min_likes")
+  bonusAmount Int      @map("bonus_amount")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([contentType, platform, minLikes])
+  @@map("viral_bonus_tiers")
+}
+
+// ============================================
+// 12. NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false) @map("is_read")
+  metadata  String?  @db.NVarChar(Max)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+// ============================================
+// 13. SYSTEM SETTINGS
+// ============================================
+
+model SystemSetting {
+  key         String   @id
+  value       String   @db.NVarChar(Max)
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// ============================================
+// 14. VIRAL POSTS
+// ============================================
+
+model ViralPost {
+  id              Int      @id @default(autoincrement())
+  dailyReportId   Int      @map("daily_report_id")
+  userId          Int      @map("user_id")
+  postUrl         String   @map("post_url") @db.NVarChar(1000)
+  platform        String   @default("FACEBOOK") // FACEBOOK, THREADS
+  contentType     String   @default("POST") @map("content_type") // POST, COMMENT
+  likes           Int      @default(0)
+  bonusAmount     Int      @default(0) @map("bonus_amount")
+  isFemaleContent Boolean  @default(false) @map("is_female_content")
+  shiftType       String   @map("shift_type")
+  submittedAt     DateTime @map("submitted_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onUpdate: Cascade, onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onUpdate: NoAction, onDelete: NoAction)
+
+  @@index([dailyReportId])
+  @@index([userId])
+  @@map("viral_posts")
+}
