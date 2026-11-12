@@ -1,0 +1,13 @@
+{
+  "name": "webhybrid-qc-crawler",
+  "version": "1.0.0",
+  "description": "High-fidelity social post scanner and capture service using Playwright",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "playwright": "1.48.0"
+  }
+}

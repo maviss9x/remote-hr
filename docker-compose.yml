@@ -1,0 +1,77 @@
+services:
+  # 1. Cơ sở dữ liệu SQL Server tự động
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: webhybrid_db
+    restart: unless-stopped
+    environment:
+      - ACCEPT_EULA=Y
+      - MSSQL_SA_PASSWORD=HybridHr@2026
+    ports:
+      # Chỉ mở cho localhost (127.0.0.1) để an toàn, không mở ra mạng ngoài/LAN
+      - "127.0.0.1:14333:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+
+  # 2. Container tự động khởi tạo DB, tạo bảng và nạp tài khoản admin
+  db_init:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.init
+    container_name: webhybrid_db_init
+    restart: "no"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=1433
+      - DB_USER=sa
+      - DB_PASSWORD=HybridHr@2026
+      - DB_NAME=remote_hr
+    depends_on:
+      - db
+
+  # 3. Crawler mạng xã hội (Playwright - chạy nội bộ trong mạng Docker)
+  qc_crawler:
+    build:
+      context: ./crawler
+      dockerfile: Dockerfile
+    container_name: webhybrid_crawler
+    restart: unless-stopped
+    environment:
+      - PORT=4000
+      - NODE_ENV=production
+    shm_size: "1gb"
+
+  # 4. Ứng dụng Web Next.js
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: webhybrid_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=sqlserver://db:1433;database=remote_hr;user=sa;password=HybridHr@2026;trustServerCertificate=true;encrypt=false;
+      - JWT_SECRET=${JWT_SECRET:-7f40bfa24a8145e390fe490bb9a80fa901637b2d4d93460b92801f46542ac0b0}
+      - NEXT_PUBLIC_APP_NAME=Remote HR
+      - QC_CRAWLER_URL=http://qc_crawler:4000
+    depends_on:
+      db_init:
+        condition: service_completed_successfully
+      qc_crawler:
+        condition: service_started
+
+  # 5. Đường truyền Public Internet (Ngrok - Tên miền cố định miễn phí vĩnh viễn)
+  tunnel:
+    image: ngrok/ngrok:latest
+    container_name: webhybrid_tunnel
+    restart: unless-stopped
+    command: http http://app:3000 --url=unbutton-finless-provided.ngrok-free.dev --log=stdout
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    depends_on:
+      - app
+
+volumes:
+  mssql_data:

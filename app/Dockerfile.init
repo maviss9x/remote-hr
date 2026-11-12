@@ -1,0 +1,15 @@
+FROM node:20-bookworm-slim
+
+RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY . .
+
+# Generate Prisma client
+RUN node scripts/generate-prisma.js
+
+CMD ["node", "scripts/init-db.mjs"]
+
